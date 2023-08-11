@@ -57,6 +57,7 @@ model PaperColorGroup {
   OrderDeposit           OrderDeposit[]
   OrderStock             OrderStock[]
   OrderProcess           OrderProcess[]
+  OrderReturn            OrderReturn[]
 }
 
 model PaperColor {
@@ -71,6 +72,7 @@ model PaperColor {
   OrderDeposit           OrderDeposit[]
   OrderStock             OrderStock[]
   OrderProcess           OrderProcess[]
+  OrderReturn            OrderReturn[]
 }
 
 model PaperPattern {
@@ -85,6 +87,7 @@ model PaperPattern {
   OrderDeposit           OrderDeposit[]
   OrderStock             OrderStock[]
   OrderProcess           OrderProcess[]
+  OrderReturn            OrderReturn[]
 }
 
 model PaperCert {
@@ -99,6 +102,7 @@ model PaperCert {
   OrderDeposit           OrderDeposit[]
   OrderStock             OrderStock[]
   OrderProcess           OrderProcess[]
+  OrderReturn            OrderReturn[]
 }
 
 enum PackagingType {
@@ -120,6 +124,7 @@ model Packaging {
   OrderDeposit OrderDeposit[]
   OrderStock   OrderStock[]
   OrderProcess OrderProcess[]
+  OrderReturn  OrderReturn[]
 
   @@unique([type, packA, packB])
 }
@@ -142,6 +147,7 @@ model Product {
   OrderDeposit           OrderDeposit[]
   OrderStock             OrderStock[]
   OrderProcess           OrderProcess[]
+  OrderReturn            OrderReturn[]
 
   @@index([paperDomainId], type: BTree)
   @@index([manufacturerId], type: BTree)
@@ -243,21 +249,24 @@ model StockEvent {
 
 // User
 model User {
-  id            Int            @id @default(autoincrement())
-  username      String         @unique
-  password      String
-  name          String
-  phoneNo       String         @default("")
-  email         String?
-  birthDate     DateTime?
-  company       Company?       @relation(fields: [companyId], references: [id])
-  companyId     Int?
-  isActivated   Boolean        @default(true)
-  isAdmin       Boolean        @default(false)
-  createdAt     DateTime       @default(now())
-  lastLoginTime DateTime?
-  DepositEvent  DepositEvent[]
-  menu          UserMenu?
+  id              Int            @id @default(autoincrement())
+  username        String         @unique
+  password        String
+  name            String
+  phoneNo         String         @default("")
+  email           String?
+  birthDate       DateTime?
+  company         Company?       @relation(fields: [companyId], references: [id])
+  companyId       Int?
+  isActivated     Boolean        @default(true)
+  isAdmin         Boolean        @default(false)
+  createdAt       DateTime       @default(now())
+  lastLoginTime   DateTime?
+  DepositEvent    DepositEvent[]
+  menu            UserMenu?
+  shipping        Shipping[]
+  createdShipping Shipping[]     @relation("createdBy")
+  OrderHistory    OrderHistory[]
 }
 
 model UserFindPasswordAuth {
@@ -373,6 +382,7 @@ model Location {
   dstOrderProcess OrderProcess[] @relation("dstLocation")
   srcOrderProcess OrderProcess[] @relation("srcLocation")
   OrderRequest    OrderRequest[]
+  OrderReturn     OrderReturn[]
 }
 
 // Prices
@@ -452,36 +462,76 @@ enum OrderType {
   DEPOSIT
   OUTSOURCE_PROCESS
   ETC
+  REFUND
+  RETURN
 }
 
 model Order {
-  id                Int           @id @default(autoincrement())
+  id                Int            @id @default(autoincrement())
   orderType         OrderType
-  orderNo           String        @unique
-  orderDate         DateTime      @default(now())
+  orderNo           String         @unique
+  orderDate         DateTime       @default(now())
   srcCompanyId      Int
-  srcCompany        Company       @relation("srcOrderCompany", fields: [srcCompanyId], references: [id])
+  srcCompany        Company        @relation("srcOrderCompany", fields: [srcCompanyId], references: [id])
   dstCompanyId      Int
-  dstCompany        Company       @relation("dstOrderCompany", fields: [dstCompanyId], references: [id])
-  status            OrderStatus   @default(ORDER_PREPARING)
-  isEntrusted       Boolean       @default(false)
+  dstCompany        Company        @relation("dstOrderCompany", fields: [dstCompanyId], references: [id])
+  status            OrderStatus    @default(ORDER_PREPARING)
+  isEntrusted       Boolean        @default(false)
   memo              String
-  ordererName       String        @default("")
+  ordererName       String         @default("")
   acceptedCompanyId Int?
-  acceptedCompany   Company?      @relation("acceptedCompany", fields: [acceptedCompanyId], references: [id])
-  isStockRejected   Boolean       @default(false)
+  acceptedCompany   Company?       @relation("acceptedCompany", fields: [acceptedCompanyId], references: [id])
+  isStockRejected   Boolean        @default(false)
   orderStock        OrderStock?
   tradePrice        TradePrice[]
   orderDeposit      OrderDeposit?
   orderProcess      OrderProcess?
   orderEtc          OrderEtc?
+  orderRefund       OrderRefund?
+  orderReturn       OrderReturn?
   taxInvoiceId      Int?
-  taxInvoice        TaxInvoice?   @relation(fields: [taxInvoiceId], references: [id])
-  revision          Int           @default(0)
+  taxInvoice        TaxInvoice?    @relation(fields: [taxInvoiceId], references: [id])
+  revision          Int            @default(0)
   depositEventId    Int?
   depositEvent      DepositEvent?
   createdCompanyId  Int
-  createdComapny    Company       @relation("createdCompany", fields: [createdCompanyId], references: [id])
+  createdComapny    Company        @relation("createdCompany", fields: [createdCompanyId], references: [id])
+  histories         OrderHistory[]
+}
+
+enum OrderHistoryType {
+  // 최초작성
+  CREATE
+  // 주문확정
+  ACCEPT
+  // 작업지시
+  PLAN_START
+  // 작업지시취소
+  PLAN_CANCEL
+  // 주문취소
+  ORDER_CANCEL
+  // 구매제안
+  OFFER_REQUEST
+  // 구매제안취소
+  OFFER_REQUEST_CANCEL
+  // 구매제안반려
+  OFFER_REQUEST_REJECT
+  // 주문접수
+  ORDER_REQUEST
+  // 주문접수취소
+  ORDER_REQUEST_CANCEL
+  // 주문접수반려
+  ORDER_REQUEST_REJECT
+}
+
+model OrderHistory {
+  id        Int              @id @default(autoincrement())
+  orderId   Int
+  order     Order            @relation(fields: [orderId], references: [id])
+  type      OrderHistoryType
+  userId    Int
+  user      User             @relation(fields: [userId], references: [id])
+  createdAt DateTime         @default(now())
 }
 
 model OrderStock {
@@ -563,6 +613,42 @@ model OrderEtc {
   item    String
 }
 
+model OrderRefund {
+  id            Int     @id @default(autoincrement())
+  orderId       Int     @unique
+  order         Order   @relation(fields: [orderId], references: [id])
+  originOrderNo String?
+  item          String  @default("")
+}
+
+model OrderReturn {
+  id                Int              @id @default(autoincrement())
+  orderId           Int              @unique
+  order             Order            @relation(fields: [orderId], references: [id])
+  originOrderNo     String?
+  dstLocationId     Int
+  dstLocation       Location         @relation(fields: [dstLocationId], references: [id])
+  wantedDate        DateTime
+  plan              Plan[]
+  // 반품원지 스펙정보
+  productId         Int
+  product           Product          @relation(fields: [productId], references: [id])
+  packagingId       Int
+  packaging         Packaging        @relation(fields: [packagingId], references: [id])
+  grammage          Int
+  sizeX             Int
+  sizeY             Int
+  paperColorGroupId Int?
+  paperColorGroup   PaperColorGroup? @relation(fields: [paperColorGroupId], references: [id])
+  paperColorId      Int?
+  paperColor        PaperColor?      @relation(fields: [paperColorId], references: [id])
+  paperPatternId    Int?
+  paperPattern      PaperPattern?    @relation(fields: [paperPatternId], references: [id])
+  paperCertId       Int?
+  paperCert         PaperCert?       @relation(fields: [paperCertId], references: [id])
+  quantity          Int              @default(0)
+}
+
 model TradePrice {
   orderId       Int
   order         Order   @relation(fields: [orderId], references: [id])
@@ -634,6 +720,8 @@ enum PlanType {
   TRADE_WITHDRAW_BUYER // 보관 입고
   TRADE_OUTSOURCE_PROCESS_SELLER // 외주 공정
   TRADE_OUTSOURCE_PROCESS_BUYER // 외주 매입
+  RETURN_SELLER // 매출반품
+  RETURN_BUYER // 매입반품
 }
 
 enum PlanStatus {
@@ -664,6 +752,8 @@ model Plan {
   planShipping       PlanShipping?
   orderProcessId     Int?
   orderProcess       OrderProcess? @relation(fields: [orderProcessId], references: [id])
+  orderReturnId      Int?
+  orderReturn        OrderReturn?  @relation(fields: [orderReturnId], references: [id])
 }
 
 model PlanShipping {
@@ -721,14 +811,29 @@ enum ShippingStatus {
   DONE
 }
 
+enum ShippingType {
+  INHOUSE
+  OUTSOURCE
+  PARTNER_PICKUP
+}
+
 model Shipping {
-  id         Int            @id @default(autoincrement())
-  shippingNo String         @unique
-  companyId  Int
-  status     ShippingStatus @default(PREPARING)
-  company    Company        @relation(fields: [companyId], references: [id])
-  invoice    Invoice[]
-  isDeleted  Boolean        @default(false)
+  id                        Int            @id @default(autoincrement())
+  type                      ShippingType
+  shippingNo                String         @unique
+  price                     Float          @default(0)
+  companyId                 Int
+  status                    ShippingStatus @default(PREPARING)
+  company                   Company        @relation(fields: [companyId], references: [id])
+  invoice                   Invoice[]
+  managerId                 Int?
+  manager                   User?          @relation(fields: [managerId], references: [id])
+  companyRegistrationNumber String?
+  memo                      String         @default("")
+  isDeleted                 Boolean        @default(false)
+  createdAt                 DateTime       @default(now())
+  createdById               Int
+  createdByUser             User           @relation("createdBy", fields: [createdById], references: [id])
 }
 
 enum InvoiceStatus {
@@ -901,7 +1006,7 @@ model BankAccount {
   /// 회사
   company       Company     @relation(fields: [companyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   /// 은행
-  bankComapny   Bank
+  bank          Bank
   /// 계좌명
   accountName   String      @db.VarChar(30)
   /// 계좌 유형
@@ -977,8 +1082,6 @@ enum Method {
   OFFSET
   /// 기타
   ETC
-  /// 전체
-  All
 }
 
 /// 증권타입
@@ -1005,8 +1108,6 @@ enum SecurityType {
 enum SecurityStatus {
   /// 사용안함
   NONE
-  /// 배서지급
-  ENDORSED
   /// 정상 결제
   NORMAL_PAYMENT
   /// 할인 결제
@@ -1017,14 +1118,6 @@ enum SecurityStatus {
   LOST
   /// 보관
   SAFEKEEPING
-}
-
-/// 발행 상태
-enum DrawedStatus {
-  /// 자사로 등록
-  SELF
-  /// 수금으로 등록
-  ACCOUNTED
 }
 
 model Security {
@@ -1038,8 +1131,6 @@ model Security {
   securityAmount   Float
   /// 증권 상태
   securityStatus   SecurityStatus @default(NONE)
-  /// 발행 상태
-  drawedStatus     DrawedStatus
   /// 발행일
   drawedDate       DateTime?
   /// 발행 은행
@@ -1069,7 +1160,7 @@ model Security {
   company   Company @relation(fields: [companyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   /// 회계 유가증권 목록
-  bySecurityList BySecurity[]
+  bySecurities BySecurity[]
 }
 
 /// 회계 타입
@@ -1094,8 +1185,6 @@ enum Subject {
   PRODUCT_SALES
   /// 기타
   ETC
-  /// 전체
-  All
 }
 
 /// 파트너
@@ -1145,7 +1234,7 @@ model Accounted {
   company   Company @relation(fields: [companyId], references: [id])
 
   /// 거래처 사업자등록번호
-  partnerCompanyRegistrationNumber String
+  companyRegistrationNumber String
 
   /// 회계 타입
   accountedType    AccountedType
@@ -1156,7 +1245,7 @@ model Accounted {
   /// 계정 과목
   accountedSubject Subject
   /// 메모
-  memo             String?       @db.VarChar(500)
+  memo             String        @default("") @db.VarChar(500)
   /// 삭제 여부
   isDeleted        Boolean       @default(false)
 
@@ -1179,7 +1268,7 @@ model ByCash {
   /// 식별자
   id          Int       @id @default(autoincrement())
   /// 금액
-  cashAmount  Int
+  amount      Int
   /// 삭제 여부
   isDeleted   Boolean   @default(false)
   /// 회계 식별자
@@ -1192,7 +1281,7 @@ model ByEtc {
   /// 식별자
   id          Int       @id @default(autoincrement())
   /// 금액
-  etcAmount   Int
+  amount      Int
   /// 삭제 여부
   isDeleted   Boolean   @default(false)
   /// 회계 식별자
@@ -1204,19 +1293,19 @@ model ByEtc {
 /// 계좌
 model ByBankAccount {
   /// 식별자
-  id                Int         @id @default(autoincrement())
+  id            Int         @id @default(autoincrement())
   /// 금액
-  bankAccountAmount Int
+  amount        Int
   /// 삭제 여부
-  isDeleted         Boolean     @default(false)
+  isDeleted     Boolean     @default(false)
   /// 회계 식별자
-  accountedId       Int         @unique
+  accountedId   Int         @unique
   /// 회계
-  accounted         Accounted   @relation(fields: [accountedId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  accounted     Accounted   @relation(fields: [accountedId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   /// 계좌 식별자
-  bankAccountId     Int
+  bankAccountId Int
   /// 계좌
-  bankAccount       BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
 /// 카드
@@ -1226,9 +1315,9 @@ model ByCard {
   /// 금액
   cardAmount     Int
   /// 수수료 금액
-  chargeAmount   Int
+  vatPrice       Int
   /// 수수료 합 or 뺀 금액(지급, 수급에 따라 변경) 수수료가 포함 안되면 0
-  totalAmount    Int
+  amount         Int
   /// 수수료 포함 여부
   isCharge       Boolean      @default(false)
   /// 승인번호
@@ -1250,30 +1339,24 @@ model ByCard {
 /// 상계
 model ByOffset {
   /// 식별자
-  id           Int           @id @default(autoincrement())
+  id             Int          @id @default(autoincrement())
   /// 금액
-  offsetAmount Int
+  amount         Int
   /// 삭제 여부
-  isDeleted    Boolean       @default(false)
+  isDeleted      Boolean      @default(false)
   /// 회계 식별자
-  accountedId  Int           @unique
+  accountedId    Int          @unique
   /// 회계
-  accounted    Accounted     @relation(fields: [accountedId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  accounted      Accounted    @relation(fields: [accountedId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   /// 상계 '지급' 식별자
-  offsetPair   ByOffsetPair?
+  byOffsetPairId Int
+  offsetPair     ByOffsetPair @relation(fields: [byOffsetPairId], references: [id])
 }
 
 model ByOffsetPair {
   /// 식별자
-  id          Int      @id @default(autoincrement())
-  /// 'paid' 거래의 ID
-  paidId      Int
-  /// 'collected' 거래의 ID
-  collectedId Int
-  /// 상계 매핑
-  byOffsetId  Int      @unique
-  /// 'paid' 거래
-  byOffset    ByOffset @relation(fields: [byOffsetId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id        Int        @id @default(autoincrement())
+  byOffsets ByOffset[]
 }
 
 /// 배서 타입
@@ -1293,7 +1376,7 @@ model BySecurity {
   /// 배서구분
   endorsementType EndorsementType?
   /// 배서자
-  endorsement     String?
+  endorsement     String           @default("")
   /// 삭제 여부
   isDeleted       Boolean          @default(false)
   /// 유가증권 식별자
