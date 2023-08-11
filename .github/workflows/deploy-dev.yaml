@@ -15,9 +15,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.DEPLOY_TOKEN }}
-          submodules: true
 
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v3
@@ -28,7 +25,10 @@ jobs:
         run: yarn install
 
       - name: Set environment
-        run: echo -e "${{ secrets.FRONT_ENV_DEV }}" >> .env.local
+        run: echo -e "${{ secrets.ENV_DEV }}" >> .env.local
+
+      - name: Set prisma
+        run: npx prisma generate
 
       - name: Build
         run: yarn build
